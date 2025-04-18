@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	stdErrors "errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -409,10 +410,10 @@ func (s *Server) GetAccessToken(ctx context.Context, gt oauth2.GrantType, tgr *o
 	case oauth2.AuthorizationCode:
 		ti, err := s.Manager.GenerateAccessToken(ctx, gt, tgr)
 		if err != nil {
-			switch err {
-			case errors.ErrInvalidAuthorizeCode, errors.ErrInvalidCodeChallenge, errors.ErrMissingCodeChallenge:
+			switch {
+			case stdErrors.Is(err, errors.ErrInvalidAuthorizeCode), stdErrors.Is(err, errors.ErrInvalidCodeChallenge), stdErrors.Is(err, errors.ErrMissingCodeChallenge):
 				return nil, errors.ErrInvalidGrant
-			case errors.ErrInvalidClient:
+			case stdErrors.Is(err, errors.ErrInvalidClient):
 				return nil, errors.ErrInvalidClient
 			default:
 				return nil, err
@@ -434,7 +435,7 @@ func (s *Server) GetAccessToken(ctx context.Context, gt oauth2.GrantType, tgr *o
 		if scopeFn := s.RefreshingScopeHandler; tgr.Scope != "" && scopeFn != nil {
 			rti, err := s.Manager.LoadRefreshToken(ctx, tgr.Refresh)
 			if err != nil {
-				if err == errors.ErrInvalidRefreshToken || err == errors.ErrExpiredRefreshToken {
+				if stdErrors.Is(err, errors.ErrInvalidRefreshToken) || stdErrors.Is(err, errors.ErrExpiredRefreshToken) {
 					return nil, errors.ErrInvalidGrant
 				}
 				return nil, err
@@ -451,7 +452,7 @@ func (s *Server) GetAccessToken(ctx context.Context, gt oauth2.GrantType, tgr *o
 		if validationFn := s.RefreshingValidationHandler; validationFn != nil {
 			rti, err := s.Manager.LoadRefreshToken(ctx, tgr.Refresh)
 			if err != nil {
-				if err == errors.ErrInvalidRefreshToken || err == errors.ErrExpiredRefreshToken {
+				if stdErrors.Is(err, errors.ErrInvalidRefreshToken) || stdErrors.Is(err, errors.ErrExpiredRefreshToken) {
 					return nil, errors.ErrInvalidGrant
 				}
 				return nil, err
@@ -466,7 +467,7 @@ func (s *Server) GetAccessToken(ctx context.Context, gt oauth2.GrantType, tgr *o
 
 		ti, err := s.Manager.RefreshAccessToken(ctx, tgr)
 		if err != nil {
-			if err == errors.ErrInvalidRefreshToken || err == errors.ErrExpiredRefreshToken {
+			if stdErrors.Is(err, errors.ErrInvalidRefreshToken) || stdErrors.Is(err, errors.ErrExpiredRefreshToken) {
 				return nil, errors.ErrInvalidGrant
 			}
 			return nil, err

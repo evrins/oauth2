@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	stdErrors "errors"
 	"time"
 
 	"github.com/go-oauth2/oauth2/v4"
@@ -75,7 +76,7 @@ func (ts *TokenStore) remove(key string) error {
 		_, err := tx.Delete(key)
 		return err
 	})
-	if err == buntdb.ErrNotFound {
+	if stdErrors.Is(err, buntdb.ErrNotFound) {
 		return nil
 	}
 	return err
@@ -113,7 +114,7 @@ func (ts *TokenStore) getData(key string) (oauth2.TokenInfo, error) {
 		return nil
 	})
 	if err != nil {
-		if err == buntdb.ErrNotFound {
+		if stdErrors.Is(err, buntdb.ErrNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -132,7 +133,7 @@ func (ts *TokenStore) getBasicID(key string) (string, error) {
 		return nil
 	})
 	if err != nil {
-		if err == buntdb.ErrNotFound {
+		if stdErrors.Is(err, buntdb.ErrNotFound) {
 			return "", nil
 		}
 		return "", err
