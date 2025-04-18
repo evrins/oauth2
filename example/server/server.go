@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -35,11 +36,12 @@ const (
 	SessionKeyReturnUri      = "ReturnUri"
 	SessionKeyLoggedInUserID = "LoggedInUserID"
 )
+
 func init() {
 	flag.BoolVar(&dumpvar, "d", true, "Dump requests and responses")
-	flag.StringVar(&idvar, "i", "222222", "The client id being passed in")
-	flag.StringVar(&secretvar, "s", "22222222", "The client secret being passed in")
-	flag.StringVar(&domainvar, "r", "http://localhost:9094", "The domain of the redirect url")
+	flag.StringVar(&idvar, "i", "000000", "The client id being passed in")
+	flag.StringVar(&secretvar, "s", "999999", "The client secret being passed in")
+	flag.StringVar(&domainvar, "r", "http://localhost:3000/login/generic_oauth", "The domain of the redirect url")
 	flag.IntVar(&portvar, "p", 9096, "the base port for the server")
 }
 
