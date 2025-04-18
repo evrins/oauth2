@@ -3,33 +3,28 @@ package main
 import (
 	"context"
 	"embed"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"os"
-	"time"
-
-	"github.com/go-oauth2/oauth2/v4/generates"
-
 	"github.com/go-oauth2/oauth2/v4/errors"
+	"github.com/go-oauth2/oauth2/v4/generates"
 	"github.com/go-oauth2/oauth2/v4/manage"
 	"github.com/go-oauth2/oauth2/v4/models"
 	"github.com/go-oauth2/oauth2/v4/server"
 	"github.com/go-oauth2/oauth2/v4/store"
 	"github.com/go-session/session/v3"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"log"
+	"net/http"
+	"net/url"
 )
 
+//go:embed static
+var static embed.FS
+
 var (
-	dumpvar   bool
-	idvar     string
-	secretvar string
-	domainvar string
-	portvar   int
+	dumpvar bool
+	portvar int
 )
 
 const (
@@ -39,10 +34,38 @@ const (
 
 func init() {
 	flag.BoolVar(&dumpvar, "d", true, "Dump requests and responses")
-	flag.StringVar(&idvar, "i", "000000", "The client id being passed in")
-	flag.StringVar(&secretvar, "s", "999999", "The client secret being passed in")
-	flag.StringVar(&domainvar, "r", "http://localhost:3000/login/generic_oauth", "The domain of the redirect url")
 	flag.IntVar(&portvar, "p", 9096, "the base port for the server")
+
+	session.InitManager(session.SetSecure(false))
+}
+
+type App struct {
+	ClientId     string
+	ClientSecret string
+	Domain       string
+}
+
+type UserInfoJson struct {
+	Sub        string              `json:"sub"`
+	Name       string              `json:"name"`
+	Password   string              `json:"password"`
+	Login      string              `json:"login"`
+	Email      string              `json:"email"`
+	Attributes map[string][]string `json:"attributes"`
+	Role       string              `json:"role"`
+}
+
+var appList = []App{
+	{
+		ClientId:     "grafana_id",
+		ClientSecret: "grafana_secret",
+		Domain:       "http://localhost:3000/login/generic_oauth",
+	},
+	{
+		ClientId:     "demo_client_id",
+		ClientSecret: "demo_client_secret",
+		Domain:       "http://localhost:9094/oauth2",
+	},
 }
 
 func main() {
@@ -57,15 +80,18 @@ func main() {
 	manager.MustTokenStorage(store.NewMemoryTokenStore())
 
 	// generate jwt access token
-	// manager.MapAccessGenerate(generates.NewJWTAccessGenerate("", []byte("00000000"), jwt.SigningMethodHS512))
+	//manager.MapAccessGenerate(generates.NewJWTAccessGenerate("", []byte("00000000"), jwt.SigningMethodHS512))
 	manager.MapAccessGenerate(generates.NewAccessGenerate())
 
 	clientStore := store.NewClientStore()
-	clientStore.Set(idvar, &models.Client{
-		ID:     idvar,
-		Secret: secretvar,
-		Domain: domainvar,
-	})
+	for _, app := range appList {
+		clientStore.Set(app.ClientId, &models.Client{
+			ID:     app.ClientId,
+			Secret: app.ClientSecret,
+			Domain: app.Domain,
+		})
+	}
+
 	manager.MapClientStorage(clientStore)
 
 	srv := server.NewServer(server.NewConfig(), manager)
@@ -90,98 +116,93 @@ func main() {
 		log.Println("Response Error:", re.Error.Error())
 	})
 
-	http.HandleFunc("/login", loginHandler)
-	http.HandleFunc("/auth", authHandler)
+	var app = echo.New()
+	app.Use(middleware.Logger())
+	app.Use(middleware.Recover())
 
-	http.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
-		if dumpvar {
-			dumpRequest(os.Stdout, "authorize", r)
-		}
+	if dumpvar {
+		app.Use(dumpRequestMiddleware)
+	}
 
-		store, err := session.Start(r.Context(), w, r)
+	app.GET("/login", loginPage)
+	app.POST("/login", loginHandler)
+	app.Any("/auth", authHandler)
+	app.Any("/oauth/authorize", func(ctx echo.Context) (err error) {
+		stor, err := session.Start(ctx.Request().Context(), ctx.Response(), ctx.Request())
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		var request = ctx.Request()
 		var form url.Values
-		if v, ok := store.Get("ReturnUri"); ok {
+		if v, ok := stor.Get(SessionKeyReturnUri); ok {
 			form = v.(url.Values)
 		}
-		r.Form = form
+		request.Form = form
 
-		store.Delete("ReturnUri")
-		store.Save()
-
-		err = srv.HandleAuthorizeRequest(w, r)
+		stor.Delete(SessionKeyReturnUri)
+		err = stor.Save()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-	})
-
-	http.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
-		if dumpvar {
-			_ = dumpRequest(os.Stdout, "token", r) // Ignore the error
-		}
-
-		err := srv.HandleTokenRequest(w, r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
-
-	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		if dumpvar {
-			_ = dumpRequest(os.Stdout, "test", r) // Ignore the error
-		}
-		token, err := srv.ValidationBearerToken(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		data := map[string]interface{}{
-			"expires_in": int64(token.GetAccessCreateAt().Add(token.GetAccessExpiresIn()).Sub(time.Now()).Seconds()),
-			"client_id":  token.GetClientID(),
-			"user_id":    token.GetUserID(),
+		err = srv.HandleAuthorizeRequest(ctx.Response(), request)
+		if err != nil {
+			return ctx.String(http.StatusBadRequest, err.Error())
 		}
-		e := json.NewEncoder(w)
-		e.SetIndent("", "  ")
-		e.Encode(data)
+
+		return nil
 	})
 
-	log.Printf("Server is running at %d port.\n", portvar)
+	app.Any("/oauth/token", func(ctx echo.Context) (err error) {
+		err = srv.HandleTokenRequest(ctx.Response(), ctx.Request())
+		if err != nil {
+			return
+		}
+		return
+	})
+
+	app.GET("/oauth/userinfo", func(ctx echo.Context) error {
+		token, err := srv.ValidationBearerToken(ctx.Request())
+		if err != nil {
+			return ctx.JSON(http.StatusBadRequest, err.Error())
+		}
+
+		var uid = token.GetUserID()
+		// todo get userinfo by uid
+		var userinfo = UserInfoJson{
+			Sub:   uid,
+			Name:  "Marcille Hu",
+			Login: "marcille",
+			Email: "marcille.hu@gmail.com",
+			Role:  "Admin",
+		}
+		return ctx.JSON(http.StatusOK, userinfo)
+	})
+
+	var addr = fmt.Sprintf(":%d", portvar)
+	log.Printf("Server is running at %s.\n", addr)
 	log.Printf("Point your OAuth client Auth endpoint to %s:%d%s", "http://localhost", portvar, "/oauth/authorize")
 	log.Printf("Point your OAuth client Token endpoint to %s:%d%s", "http://localhost", portvar, "/oauth/token")
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", portvar), nil))
-}
-
-func dumpRequest(writer io.Writer, header string, r *http.Request) error {
-	data, err := httputil.DumpRequest(r, true)
-	if err != nil {
-		return err
-	}
-	writer.Write([]byte("\n" + header + ": \n"))
-	writer.Write(data)
-	return nil
+	log.Fatal(app.Start(addr))
 }
 
 func userAuthorizeHandler(w http.ResponseWriter, r *http.Request) (userID string, err error) {
 	if dumpvar {
-		_ = dumpRequest(os.Stdout, "userAuthorizeHandler", r) // Ignore the error
+		_ = dumpRequest("userAuthorizeHandler", r) // Ignore the error
 	}
-	store, err := session.Start(r.Context(), w, r)
+	stor, err := session.Start(r.Context(), w, r)
 	if err != nil {
 		return
 	}
 
-	uid, ok := store.Get("LoggedInUserID")
+	uid, ok := stor.Get(SessionKeyLoggedInUserID)
 	if !ok {
 		if r.Form == nil {
 			r.ParseForm()
 		}
-		store.Set("ReturnUri", r.Form)
-		store.Save()
+		stor.Set(SessionKeyReturnUri, r.Form)
+		stor.Save()
 
 		w.Header().Set("Location", "/login")
 		w.WriteHeader(http.StatusFound)
@@ -189,73 +210,54 @@ func userAuthorizeHandler(w http.ResponseWriter, r *http.Request) (userID string
 	}
 
 	userID = uid.(string)
-	store.Delete("LoggedInUserID")
-	store.Save()
+	stor.Delete(SessionKeyLoggedInUserID)
+	stor.Save()
 	return
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
-	if dumpvar {
-		_ = dumpRequest(os.Stdout, "login", r) // Ignore the error
-	}
-	store, err := session.Start(r.Context(), w, r)
+func loginPage(ctx echo.Context) (err error) {
+	content, err := static.ReadFile("static/login.html")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	if r.Method == "POST" {
-		if r.Form == nil {
-			if err := r.ParseForm(); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
-
-		if r.Form.Get("username") == "test" && r.Form.Get("password") == "test" {
-			store.Set("LoggedInUserID", r.Form.Get("username"))
-			store.Save()
-
-			w.Header().Set("Location", "/auth")
-			w.WriteHeader(http.StatusFound)
-			return
-		} else {
-			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
-			return
-		}
-	}
-	outputHTML(w, r, "static/login.html")
+	return ctx.HTML(http.StatusOK, string(content))
 }
 
-func authHandler(w http.ResponseWriter, r *http.Request) {
-	if dumpvar {
-		_ = dumpRequest(os.Stdout, "auth", r) // Ignore the error
-	}
-	store, err := session.Start(nil, w, r)
+func loginHandler(ctx echo.Context) (err error) {
+	stor, err := session.Start(ctx.Request().Context(), ctx.Response(), ctx.Request())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if _, ok := store.Get("LoggedInUserID"); !ok {
-		w.Header().Set("Location", "/login")
-		w.WriteHeader(http.StatusFound)
-		return
+	var username = ctx.FormValue("username")
+	var password = ctx.FormValue("password")
+	if username == "test" && password == "test" {
+		stor.Set(SessionKeyLoggedInUserID, username)
+		err = stor.Save()
+		if err != nil {
+			return
+		}
+
+		return ctx.Redirect(http.StatusFound, "/auth")
+	} else {
+		return ctx.String(http.StatusUnauthorized, "Invalid username or password")
 	}
 
-	outputHTML(w, r, "static/auth.html")
 }
 
-//go:embed static
-var static embed.FS
-
-func outputHTML(w http.ResponseWriter, req *http.Request, filename string) {
-	file, err := static.Open(filename)
+func authHandler(ctx echo.Context) (err error) {
+	stor, err := session.Start(nil, ctx.Response(), ctx.Request())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
 		return
 	}
-	defer file.Close()
-	fi, _ := file.Stat()
-	http.ServeContent(w, req, fi.Name(), fi.ModTime(), file.(io.ReadSeekCloser))
+
+	if _, ok := stor.Get(SessionKeyLoggedInUserID); !ok {
+		return ctx.Redirect(http.StatusFound, "/login")
+	}
+
+	content, err := static.ReadFile("static/auth.html")
+	if err != nil {
+		return
+	}
+	return ctx.HTML(http.StatusOK, string(content))
 }

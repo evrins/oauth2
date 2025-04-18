@@ -14,6 +14,7 @@ import (
 
 // JWTAccessClaims jwt claims
 type JWTAccessClaims struct {
+	Email string `json:"email,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -43,7 +44,17 @@ type JWTAccessGenerate struct {
 
 // Token based on the UUID generated token
 func (a *JWTAccessGenerate) Token(ctx context.Context, data *oauth2.GenerateBasic, isGenRefresh bool) (string, string, error) {
+	// Get extension fields if available
+	var email string
+	if extendable, ok := data.TokenInfo.(oauth2.ExtendableTokenInfo); ok {
+		extension := extendable.GetExtension()
+		if extension != nil {
+			email = extension.Get("email")
+		}
+	}
+
 	claims := &JWTAccessClaims{
+		Email: email,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Audience:  jwt.ClaimStrings{data.Client.GetID()},
 			Subject:   data.UserID,
