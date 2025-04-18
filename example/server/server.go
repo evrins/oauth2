@@ -31,6 +31,10 @@ var (
 	portvar   int
 )
 
+const (
+	SessionKeyReturnUri      = "ReturnUri"
+	SessionKeyLoggedInUserID = "LoggedInUserID"
+)
 func init() {
 	flag.BoolVar(&dumpvar, "d", true, "Dump requests and responses")
 	flag.StringVar(&idvar, "i", "222222", "The client id being passed in")
