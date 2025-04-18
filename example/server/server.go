@@ -244,13 +244,16 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	outputHTML(w, r, "static/auth.html")
 }
 
+//go:embed static
+var static embed.FS
+
 func outputHTML(w http.ResponseWriter, req *http.Request, filename string) {
-	file, err := os.Open(filename)
+	file, err := static.Open(filename)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 	defer file.Close()
 	fi, _ := file.Stat()
-	http.ServeContent(w, req, file.Name(), fi.ModTime(), file)
+	http.ServeContent(w, req, fi.Name(), fi.ModTime(), file.(io.ReadSeekCloser))
 }
