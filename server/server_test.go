@@ -74,7 +74,7 @@ func TestAuthorizeCode(t *testing.T) {
 	}))
 	defer tsrv.Close()
 
-	e := httpexpect.New(t, tsrv.URL)
+	e := httpexpect.Default(t, tsrv.URL)
 
 	csrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -124,7 +124,7 @@ func TestAuthorizeCodeWithChallengePlain(t *testing.T) {
 	}))
 	defer tsrv.Close()
 
-	e := httpexpect.New(t, tsrv.URL)
+	e := httpexpect.Default(t, tsrv.URL)
 
 	csrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -177,7 +177,7 @@ func TestAuthorizeCodeWithChallengeS256(t *testing.T) {
 	}))
 	defer tsrv.Close()
 
-	e := httpexpect.New(t, tsrv.URL)
+	e := httpexpect.Default(t, tsrv.URL)
 
 	csrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -230,7 +230,7 @@ func TestImplicit(t *testing.T) {
 		testServer(t, w, r)
 	}))
 	defer tsrv.Close()
-	e := httpexpect.New(t, tsrv.URL)
+	e := httpexpect.Default(t, tsrv.URL)
 
 	csrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer csrv.Close()
@@ -256,7 +256,7 @@ func TestPasswordCredentials(t *testing.T) {
 		testServer(t, w, r)
 	}))
 	defer tsrv.Close()
-	e := httpexpect.New(t, tsrv.URL)
+	e := httpexpect.Default(t, tsrv.URL)
 
 	manager.MapClientStorage(clientStore("", false))
 	srv = server.NewDefaultServer(manager)
@@ -289,7 +289,7 @@ func TestClientCredentials(t *testing.T) {
 		testServer(t, w, r)
 	}))
 	defer tsrv.Close()
-	e := httpexpect.New(t, tsrv.URL)
+	e := httpexpect.Default(t, tsrv.URL)
 
 	manager.MapClientStorage(clientStore("", false))
 
@@ -340,7 +340,7 @@ func TestRefreshing(t *testing.T) {
 		testServer(t, w, r)
 	}))
 	defer tsrv.Close()
-	e := httpexpect.New(t, tsrv.URL)
+	e := httpexpect.Default(t, tsrv.URL)
 
 	csrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
