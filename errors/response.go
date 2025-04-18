@@ -44,7 +44,7 @@ var (
 	ErrInvalidClient                  = errors.New("invalid_client")
 	ErrInvalidGrant                   = errors.New("invalid_grant")
 	ErrUnsupportedGrantType           = errors.New("unsupported_grant_type")
-	ErrCodeChallengeRquired           = errors.New("invalid_request")
+	ErrCodeChallengeRequired          = errors.New("invalid_request")
 	ErrUnsupportedCodeChallengeMethod = errors.New("invalid_request")
 	ErrInvalidCodeChallengeLen        = errors.New("invalid_request")
 )
@@ -61,7 +61,7 @@ var Descriptions = map[error]string{
 	ErrInvalidClient:                  "Client authentication failed",
 	ErrInvalidGrant:                   "The provided authorization grant (e.g., authorization code, resource owner credentials) or refresh token is invalid, expired, revoked, does not match the redirection URI used in the authorization request, or was issued to another client",
 	ErrUnsupportedGrantType:           "The authorization grant type is not supported by the authorization server",
-	ErrCodeChallengeRquired:           "PKCE is required. code_challenge is missing",
+	ErrCodeChallengeRequired:          "PKCE is required. code_challenge is missing",
 	ErrUnsupportedCodeChallengeMethod: "Selected code_challenge_method not supported",
 	ErrInvalidCodeChallengeLen:        "Code challenge length must be between 43 and 128 charachters long",
 }
@@ -78,7 +78,7 @@ var StatusCodes = map[error]int{
 	ErrInvalidClient:                  401,
 	ErrInvalidGrant:                   401,
 	ErrUnsupportedGrantType:           401,
-	ErrCodeChallengeRquired:           400,
+	ErrCodeChallengeRequired:          400,
 	ErrUnsupportedCodeChallengeMethod: 400,
 	ErrInvalidCodeChallengeLen:        400,
 }
