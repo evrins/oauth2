@@ -53,10 +53,10 @@ type (
 	// ResponseTokenHandler response token handling
 	ResponseTokenHandler func(w http.ResponseWriter, data map[string]interface{}, header http.Header, statusCode ...int) error
 
-	// Handler to fetch the refresh token from the request
+	// RefreshTokenResolveHandler Handler to fetch the refresh token from the request
 	RefreshTokenResolveHandler func(r *http.Request) (string, error)
 
-	// Handler to fetch the access token from the request
+	// AccessTokenResolveHandler Handler to fetch the access token from the request
 	AccessTokenResolveHandler func(r *http.Request) (string, bool)
 )
 
